@@ -7,37 +7,43 @@ const MySQLStore = require("express-mysql-session")(session);
 const passport = require("passport");
 const fs = require("fs");
 const GoogleStrategy = require("passport-google-oauth2").Strategy;
-const bodyParser = require('body-parser');
-const mysql = require('mysql');
+const bodyParser = require("body-parser");
+const mysql = require("mysql");
+const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
-const PORT = 3000;
+const PORT = 8000;
 
 // 위의 Google Developers Console에서 생성한 client id와 secret
-const GOOGLE_CLIENT_ID = "8184804334-ug7p9u3tibnuqfsf5feaijmefbl48s2d.apps.googleusercontent.com";
-const GOOGLE_CLIENT_SECRET = "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";
+// const GOOGLE_CLIENT_ID =
+//   "8184804334-ug7p9u3tibnuqfsf5feaijmefbl48s2d.apps.googleusercontent.com";
+// const GOOGLE_CLIENT_SECRET = "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";
+const GOOGLE_CLIENT_ID =
+  "958093468974-tjmfe9nh1jh1l5m79a8ihdgidlen6ok6.apps.googleusercontent.com";
+const GOOGLE_CLIENT_SECRET = "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";
 
 // db session store options
 const options = {
-    host: "db-aim.cv48si1lach8.us-east-2.rds.amazonaws.com",
-    port: 3306,
-    user: "admin",
-    password: "aimjungle!2345",
-    database: "aim_production",
+  host: "db-aim.cv48si1lach8.us-east-2.rds.amazonaws.com",
+  port: 3306,
+  user: "admin",
+  password: "aimjungle!2345",
+  database: "aim_production",
 };
 
 // mysql session store 생성
 const sessionStore = new MySQLStore(options);
 
 // express session 연결
+app.use(cors());
 app.use(
-    session({
-        secret: "secret key",
-        store: sessionStore,
-        resave: false,
-        saveUninitialized: false,
-    })
+  session({
+    secret: "secret key",
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+  })
 );
 
 // mysql 연결
@@ -57,13 +63,13 @@ app.use(passport.session());
 // login이 최초로 성공했을 때만 호출되는 함수
 // done(null, user.id)로 세션을 초기화 한다.
 passport.serializeUser(function (user, done) {
-    done(null, user.id);
+  done(null, user.id);
 });
 
 // 사용자가 페이지를 방문할 때마다 호출되는 함수
 // done(null, id)로 사용자의 정보를 각 request의 user 변수에 넣어준다.
 passport.deserializeUser(function (id, done) {
-    done(null, id);
+  done(null, id);
 });
 
 // Google login 전략
@@ -71,110 +77,124 @@ passport.deserializeUser(function (id, done) {
 // 해당 콜백 function에서 사용자가 누구인지 done(null, user) 형식으로 넣으면 된다.
 // 이 예시에서는 넘겨받은 profile을 전달하는 것으로 대체했다.
 passport.use(
-    new GoogleStrategy(
-        {
-            // 예림 관리 키
-            clientID: GOOGLE_CLIENT_ID,
-            clientSecret: GOOGLE_CLIENT_SECRET,
-            callbackURL: "http://localhost:3000/auth/google/callback",
-            passReqToCallback: true,
-        },
-        function (request, accessToken, refreshToken, profile, done) {
-            db.query('SELECT * FROM aim_user_info WHERE email=?', [profile.email], function(error, result){
-                if (error) {
-                    throw error;
-                }
-                
-                if (result.length === 0) {
-                    db.query('INSERT INTO aim_user_info (session_id, email) VALUES(?,?)', [request.session.passport.user, profile.email], function(error2, result){
-                        if (error2) {
-                            throw error2;
-                        }
-                    });
-                }
-            });
+  new GoogleStrategy(
+    {
+      // 예림 관리 키
+      clientID: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+      callbackURL: "http://localhost:8000/auth/google/callback",
+      passReqToCallback: true,
+    },
+    function (request, accessToken, refreshToken, profile, done) {
+      db.query(
+        "SELECT * FROM aim_user_info WHERE email=?",
+        [profile.email],
+        function (error, result) {
+          if (error) {
+            throw error;
+          }
 
-            // console.log(profile);
-            // console.log(accessToken);
-
-            return done(null, profile);
+          if (result.length === 0) {
+            db.query(
+              "INSERT INTO aim_user_info (session_id, email) VALUES(?,?)",
+              [request.session.passport.user, profile.email],
+              function (error2, result) {
+                if (error2) {
+                  throw error2;
+                }
+              }
+            );
+          }
         }
-    )
+      );
+
+      // console.log(profile);
+      // console.log(accessToken);
+
+      return done(null, profile);
+    }
+  )
 );
 
 // login 화면
 // 이미 로그인한 회원이라면(session 정보가 존재한다면) main화면으로 리다이렉트
 app.get("/login", (req, res) => {
-    if (req.user) {
-        // 닉네임, 캐릭터 정보를 조회하는 쿼리
+  console.log(req);
+  if (req.user) {
+    // 닉네임, 캐릭터 정보를 조회하는 쿼리
 
-        return res.redirect("/");
-    }
-    
-    else {
-        fs.readFile("./webpage/login.html", (error, data) => {
-            if (error) {
-                console.log(error);
-                return res.sendStatus(500);
-            }
+    return res.redirect("/");
+  } else {
+    fs.readFile("./webpage/login.html", (error, data) => {
+      if (error) {
+        console.log(error);
+        return res.sendStatus(500);
+      }
 
-            res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(data);
-        });
-    }
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(data);
+    });
+  }
 });
 
 // login 화면
 // 로그인 하지 않은 회원이라면(session 정보가 존재하지 않는다면) login화면으로 리다이렉트
 app.get("/", (req, res) => {
-    //조회
-    if (!req.user) return res.redirect("/login");
-    fs.readFile("./webpage/selectCharacter.html", (error, data) => {
-        if (error) {
-            console.log(error);
-            return res.sendStatus(500);
-        }
+  //조회
+  if (!req.user) return res.redirect("/login");
+  fs.readFile("./webpage/selectCharacter.html", (error, data) => {
+    if (error) {
+      console.log(error);
+      return res.sendStatus(500);
+    }
 
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(data);
-    });
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(data);
+  });
 });
 
-app.post('/sendNickname', (req, res) => {
-    let post = req.body;
-    let session_id = req.session.passport.user;
-    db.query('UPDATE aim_user_info SET nickname=? WHERE session_id=?', [post.nickname, session_id], function(error, result){
-        if (error) {
-            throw error;
-        }
-    });
+app.post("/sendNickname", (req, res) => {
+  console.log(req.body);
 
-    // console.log('Got body:', req.body);
-    res.sendStatus(200);
+  //   console.log(res);
+  //   let post = req.body;
+  //   console.log(req.session);
+  //   let session_id = req.session.passport.user;
+  //   db.query(
+  //     "UPDATE aim_user_info SET nickname=? WHERE session_id=?",
+  //     [post.nickname, session_id],
+  //     function (error, result) {
+  //       if (error) {
+  //         throw error;
+  //       }
+  //     }
+  //   );
+
+  // console.log('Got body:', req.body);
+  res.sendStatus(200);
 });
-
 
 // google login 화면
 app.get(
-    "/auth/google",
-    passport.authenticate("google", { scope: ["email", "profile"] })
+  "/auth/google",
+  passport.authenticate("google", { scope: ["email", "profile"] })
 );
 
 // google login 성공과 실패 리다이렉트
 app.get(
-    "/auth/google/callback",
-    passport.authenticate("google", {
-        successRedirect: "/",
-        failureRedirect: "/login",
-    })
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    successRedirect: "/",
+    failureRedirect: "/login",
+  })
 );
 
 // logout
 app.get("/logout", (req, res) => {
-    req.logout();
-    res.redirect("/login");
+  req.logout();
+  res.redirect("/login");
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on ${PORT}`);
+  console.log(`Server running on ${PORT}`);
 });
